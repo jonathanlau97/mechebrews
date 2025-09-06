@@ -224,6 +224,7 @@ elif page == "👨‍🍳 Barista":
             if st.button("🗑️ Clear Completed Orders", use_container_width=True):
                 try:
                     st.session_state.orders = [order for order in st.session_state.orders if order.get('status') != 'completed']
+                    save_shared_data()  # Save after clearing
                     st.rerun()
                 except Exception as e:
                     st.error("Error clearing orders")
