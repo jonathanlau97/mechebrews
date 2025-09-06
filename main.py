@@ -12,7 +12,7 @@ if 'used_cards' not in st.session_state:
 # Poker card configuration
 SUITS = ['♠️', '♥️', '♦️', '♣️']
 NUMBERS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K']
-COFFEE_TYPES = ['Latte', 'Americano', 'Cappuccino', 'Mocha', 'Long Black', 'Fresh Milk','Milo']
+COFFEE_TYPES = ['Latte', 'Americano', 'Cappuccino', 'Mocha', 'Long Black', 'Fresh Milk']
 
 def generate_order_number():
     """Generate a unique poker card order number"""
@@ -92,29 +92,37 @@ if page == "🛒 Order Input":
         
         # Coffee type selection
         coffee_cols = st.columns(3)
-        selected_coffee = None
         
         for i, coffee in enumerate(COFFEE_TYPES):
             with coffee_cols[i % 3]:
                 if st.button(coffee, key=f"coffee_{coffee}", use_container_width=True):
-                    selected_coffee = coffee
+                    st.session_state.selected_coffee = coffee
+                    st.rerun()
         
-        if selected_coffee:
-            st.success(f"Selected: {selected_coffee}")
+        # Show selected coffee and temperature options
+        if st.session_state.selected_coffee:
+            st.success(f"Selected: {st.session_state.selected_coffee}")
             
             st.subheader("Temperature")
-            temp_col1, temp_col2 = st.columns(2)
+            temp_col1, temp_col2, temp_col3 = st.columns([1, 1, 1])
             
             with temp_col1:
                 if st.button("🔥 HOT", key="hot_btn", use_container_width=True):
-                    add_order(selected_coffee, "Hot")
-                    st.success(f"Order added: Hot {selected_coffee}")
+                    add_order(st.session_state.selected_coffee, "Hot")
+                    st.success(f"Order added: Hot {st.session_state.selected_coffee}")
+                    st.session_state.selected_coffee = None  # Reset selection
                     st.rerun()
             
             with temp_col2:
                 if st.button("🧊 ICED", key="iced_btn", use_container_width=True):
-                    add_order(selected_coffee, "Iced")
-                    st.success(f"Order added: Iced {selected_coffee}")
+                    add_order(st.session_state.selected_coffee, "Iced")
+                    st.success(f"Order added: Iced {st.session_state.selected_coffee}")
+                    st.session_state.selected_coffee = None  # Reset selection
+                    st.rerun()
+            
+            with temp_col3:
+                if st.button("❌ Cancel", key="cancel_btn", use_container_width=True):
+                    st.session_state.selected_coffee = None
                     st.rerun()
     
     with col2:
