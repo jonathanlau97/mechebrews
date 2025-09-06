@@ -284,6 +284,7 @@ elif page == "🍽️ Waiter Service":
                     if st.button(f"✅ Served", key=f"serve_{order_num}_{i}", use_container_width=True):
                         if mark_order_completed(order_num):
                             st.success(f"Order {order_num} marked as served!")
+                            st.balloons()  # Celebration for serving an order!
                             st.rerun()
             
             # Summary
