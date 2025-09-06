@@ -411,6 +411,127 @@ elif page == "🍽️ Waiter Service":
     except Exception as e:
         st.error("Error loading waiter service page")
 
+# ANALYTICS PAGE
+elif page == "📊 Analytics":
+    st.title("📊 Coffee Shop Analytics")
+    st.markdown("---")
+    
+    try:
+        # Load historical data
+        orders_history, daily_summary = load_historical_data()
+        
+        if not orders_history and not daily_summary:
+            st.info("📈 No historical data yet. Complete some orders and save your session to see analytics!")
+        else:
+            # Daily Summary Section
+            if daily_summary:
+                st.subheader("📅 Daily Summary")
+                
+                summary_df = pd.DataFrame(daily_summary)
+                summary_df['date'] = pd.to_datetime(summary_df['date'])
+                summary_df = summary_df.sort_values('date', ascending=False)
+                
+                # Display recent days
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.metric("Total Days Recorded", len(summary_df))
+                    if len(summary_df) > 0:
+                        latest_day = summary_df.iloc[0]
+                        st.metric("Latest Day Orders", latest_day['total_orders'])
+                
+                with col2:
+                    total_all_time_cups = summary_df['total_cups'].sum()
+                    st.metric("All-Time Cups Sold", total_all_time_cups)
+                    if len(summary_df) > 0:
+                        st.metric("Latest Day Cups", latest_day['total_cups'])
+                
+                # Recent days table
+                st.subheader("Recent Days")
+                display_df = summary_df.copy()
+                display_df['date'] = display_df['date'].dt.strftime('%Y-%m-%d')
+                st.dataframe(
+                    display_df.rename(columns={
+                        'date': 'Date',
+                        'total_orders': 'Orders',
+                        'total_cups': 'Cups Sold'
+                    }),
+                    use_container_width=True
+                )
+            
+            # Drink Popularity Section
+            if orders_history:
+                st.subheader("☕ Drink Popularity")
+                
+                drink_stats = get_drink_analytics(orders_history)
+                
+                if drink_stats:
+                    # Create a simple bar chart display
+                    st.markdown("**Most Popular Drinks (All Time):**")
+                    
+                    for i, (drink, count) in enumerate(list(drink_stats.items())[:10], 1):
+                        percentage = (count / sum(drink_stats.values())) * 100
+                        st.markdown(f"""
+                        <div style="
+                            background-color: #f0f2f6;
+                            padding: 10px;
+                            margin: 5px 0;
+                            border-radius: 5px;
+                            border-left: 5px solid #ff6b6b;
+                        ">
+                            <strong>{i}. {drink}</strong><br>
+                            <span style="color: #666;">
+                                {count} cups sold ({percentage:.1f}%)
+                            </span>
+                        </div>
+                        """, unsafe_allow_html=True)
+                
+                # Raw data section (expandable)
+                with st.expander("📋 View Raw Order Data"):
+                    if orders_history:
+                        orders_df = pd.DataFrame(orders_history)
+                        orders_df = orders_df.sort_values(['date', 'order_time'], ascending=False)
+                        st.dataframe(orders_df, use_container_width=True)
+        
+        # Data management
+        st.markdown("---")
+        st.subheader("🔧 Data Management")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("📥 Download Historical Data"):
+                try:
+                    if orders_history:
+                        df = pd.DataFrame(orders_history)
+                        csv = df.to_csv(index=False)
+                        st.download_button(
+                            label="📄 Download Orders CSV",
+                            data=csv,
+                            file_name=f"coffee_orders_{datetime.now().strftime('%Y%m%d')}.csv",
+                            mime="text/csv"
+                        )
+                    else:
+                        st.info("No data to download")
+                except Exception as e:
+                    st.error(f"Download error: {e}")
+        
+        with col2:
+            if st.button("🗑️ Clear All History", type="secondary"):
+                if st.button("⚠️ Confirm Delete All History"):
+                    try:
+                        if os.path.exists('coffee_orders_history.csv'):
+                            os.remove('coffee_orders_history.csv')
+                        if os.path.exists('daily_summary.csv'):
+                            os.remove('daily_summary.csv')
+                        st.success("All historical data cleared!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error clearing data: {e}")
+        
+    except Exception as e:
+        st.error(f"Error loading analytics: {e}")
+
 # Footer
 st.markdown("---")
 st.markdown("Made with ❤️ and ☕")
