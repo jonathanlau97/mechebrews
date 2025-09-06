@@ -1,7 +1,6 @@
 import streamlit as st
-import random
 import time
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 # Page configuration - must be first Streamlit command
 st.set_page_config(
@@ -13,10 +12,12 @@ st.set_page_config(
 # Initialize session state
 if 'orders' not in st.session_state:
     st.session_state.orders = []
-if 'used_cards' not in st.session_state:
-    st.session_state.used_cards = set()
-if 'selected_coffee' not in st.session_state:
-    st.session_state.selected_coffee = None
+if 'card_counter' not in st.session_state:
+    st.session_state.card_counter = 0
+if 'selected_drinks' not in st.session_state:
+    st.session_state.selected_drinks = {}
+if 'daily_served' not in st.session_state:
+    st.session_state.daily_served = {}
 
 # Poker card configuration
 SUITS = ['♠️', '♥️', '♦️', '♣️']
@@ -24,36 +25,37 @@ NUMBERS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K']
 COFFEE_TYPES = ['Latte', 'Americano', 'Cappuccino', 'Mocha', 'Long Black', 'Fresh Milk']
 
 def generate_order_number():
-    """Generate a unique poker card order number"""
+    """Generate sequential poker card order number A->K"""
     try:
-        available_cards = []
-        for suit in SUITS:
-            for number in NUMBERS:
-                card = f"{suit}{number}"
-                if card not in st.session_state.used_cards:
-                    available_cards.append(card)
+        current_counter = st.session_state.card_counter
         
-        if not available_cards:
-            # Reset if all cards are used
-            st.session_state.used_cards = set()
-            available_cards = [f"{suit}{number}" for suit in SUITS for number in NUMBERS]
+        # Calculate position in sequence (A=0, 2=1, 3=2, ..., K=12)
+        card_position = current_counter % 13
+        suit_position = (current_counter // 13) % 4
         
-        selected_card = random.choice(available_cards)
-        st.session_state.used_cards.add(selected_card)
-        return selected_card
+        card_number = NUMBERS[card_position]
+        card_suit = SUITS[suit_position]
+        order_number = f"{card_suit}{card_number}"
+        
+        # Increment counter
+        st.session_state.card_counter += 1
+        
+        return order_number
     except Exception as e:
-        # Fallback to simple numbering if card system fails
-        return f"#{len(st.session_state.orders) + 1}"
+        st.error(f"Card generation error: {e}")
+        return f"#{st.session_state.card_counter + 1}"
 
-def add_order(coffee_type: str, temperature: str):
-    """Add a new order to the session state"""
+def add_order(drinks_dict: dict):
+    """Add a new order with multiple drinks"""
     try:
+        if not drinks_dict:
+            return False
+            
         order_number = generate_order_number()
         order = {
             'order_number': order_number,
-            'coffee_type': coffee_type,
-            'temperature': temperature,
-            'timestamp': time.time(),  # Using time.time() instead of datetime
+            'drinks': drinks_dict.copy(),  # Dictionary of {drink_key: quantity}
+            'timestamp': time.time(),
             'status': 'pending'
         }
         st.session_state.orders.append(order)
@@ -66,7 +68,6 @@ def get_pending_orders():
     """Get all pending orders sorted by timestamp"""
     try:
         pending = [order for order in st.session_state.orders if order.get('status', 'pending') == 'pending']
-        # Sort by timestamp
         pending.sort(key=lambda x: x.get('timestamp', 0))
         return pending
     except Exception as e:
@@ -80,8 +81,9 @@ def get_drink_summary():
         drink_counts = {}
         
         for order in pending_orders:
-            drink_key = f"{order.get('temperature', 'Hot')} {order.get('coffee_type', 'Unknown')}"
-            drink_counts[drink_key] = drink_counts.get(drink_key, 0) + 1
+            drinks = order.get('drinks', {})
+            for drink_key, quantity in drinks.items():
+                drink_counts[drink_key] = drink_counts.get(drink_key, 0) + quantity
         
         return drink_counts
     except Exception as e:
@@ -89,16 +91,38 @@ def get_drink_summary():
         return {}
 
 def mark_order_completed(order_number: str):
-    """Mark an order as completed"""
+    """Mark an order as completed and update daily served count"""
     try:
+        import datetime
+        today = datetime.datetime.now().strftime('%Y-%m-%d')
+        
         for order in st.session_state.orders:
             if order.get('order_number') == order_number:
                 order['status'] = 'completed'
+                
+                # Count total cups in this order
+                drinks = order.get('drinks', {})
+                total_cups = sum(drinks.values())
+                
+                # Update daily served count
+                if today not in st.session_state.daily_served:
+                    st.session_state.daily_served[today] = 0
+                st.session_state.daily_served[today] += total_cups
+                
                 return True
         return False
     except Exception as e:
         st.error(f"Error marking order complete: {str(e)}")
         return False
+
+def get_today_served():
+    """Get total cups served today"""
+    try:
+        import datetime
+        today = datetime.datetime.now().strftime('%Y-%m-%d')
+        return st.session_state.daily_served.get(today, 0)
+    except:
+        return 0
 
 def format_time(timestamp):
     """Format timestamp to readable time"""
@@ -111,6 +135,13 @@ def format_time(timestamp):
 
 # Sidebar for page selection
 st.sidebar.title("Coffee Shop Interface")
+
+# Show today's served count in sidebar
+today_served = get_today_served()
+st.sidebar.markdown("---")
+st.sidebar.metric("☕ Cups Served Today", today_served)
+st.sidebar.markdown("---")
+
 page = st.sidebar.selectbox(
     "Select Page",
     ["🛒 Order Input", "👨‍🍳 Barista", "🍽️ Waiter Service"]
@@ -124,44 +155,85 @@ if page == "🛒 Order Input":
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        st.subheader("Select Your Coffee")
+        st.subheader("Build Your Order")
         
-        # Coffee type selection
-        coffee_cols = st.columns(3)
+        # Display current order being built
+        if st.session_state.selected_drinks:
+            st.markdown("### 📝 Current Order:")
+            total_items = 0
+            for drink_key, qty in st.session_state.selected_drinks.items():
+                if qty > 0:
+                    st.write(f"• {drink_key}: **{qty}**")
+                    total_items += qty
+            st.info(f"Total items: {total_items}")
+            st.markdown("---")
         
-        for i, coffee in enumerate(COFFEE_TYPES):
-            with coffee_cols[i % 3]:
-                if st.button(coffee, key=f"coffee_{coffee}", use_container_width=True):
-                    st.session_state.selected_coffee = coffee
-                    st.rerun()
-        
-        # Show selected coffee and temperature options
-        if st.session_state.selected_coffee:
-            st.success(f"Selected: {st.session_state.selected_coffee}")
+        # Coffee selection with quantity controls
+        for coffee in COFFEE_TYPES:
+            st.markdown(f"### {coffee}")
             
-            st.subheader("Temperature")
-            temp_col1, temp_col2, temp_col3 = st.columns([1, 1, 1])
+            hot_col, iced_col = st.columns(2)
             
-            with temp_col1:
-                if st.button("🔥 HOT", key="hot_btn", use_container_width=True):
-                    if add_order(st.session_state.selected_coffee, "Hot"):
-                        st.success(f"Order added: Hot {st.session_state.selected_coffee}")
-                        st.session_state.selected_coffee = None
-                        time.sleep(1)  # Brief pause to show success message
+            with hot_col:
+                hot_key = f"Hot {coffee}"
+                current_hot = st.session_state.selected_drinks.get(hot_key, 0)
+                
+                qty_cols = st.columns([1, 2, 1])
+                with qty_cols[0]:
+                    if st.button("➖", key=f"minus_hot_{coffee}"):
+                        if current_hot > 0:
+                            st.session_state.selected_drinks[hot_key] = current_hot - 1
+                            if st.session_state.selected_drinks[hot_key] == 0:
+                                del st.session_state.selected_drinks[hot_key]
+                            st.rerun()
+                
+                with qty_cols[1]:
+                    st.markdown(f"**🔥 Hot: {current_hot}**")
+                
+                with qty_cols[2]:
+                    if st.button("➕", key=f"plus_hot_{coffee}"):
+                        st.session_state.selected_drinks[hot_key] = current_hot + 1
                         st.rerun()
             
-            with temp_col2:
-                if st.button("🧊 ICED", key="iced_btn", use_container_width=True):
-                    if add_order(st.session_state.selected_coffee, "Iced"):
-                        st.success(f"Order added: Iced {st.session_state.selected_coffee}")
-                        st.session_state.selected_coffee = None
-                        time.sleep(1)  # Brief pause to show success message
+            with iced_col:
+                iced_key = f"Iced {coffee}"
+                current_iced = st.session_state.selected_drinks.get(iced_key, 0)
+                
+                qty_cols = st.columns([1, 2, 1])
+                with qty_cols[0]:
+                    if st.button("➖", key=f"minus_iced_{coffee}"):
+                        if current_iced > 0:
+                            st.session_state.selected_drinks[iced_key] = current_iced - 1
+                            if st.session_state.selected_drinks[iced_key] == 0:
+                                del st.session_state.selected_drinks[iced_key]
+                            st.rerun()
+                
+                with qty_cols[1]:
+                    st.markdown(f"**🧊 Iced: {current_iced}**")
+                
+                with qty_cols[2]:
+                    if st.button("➕", key=f"plus_iced_{coffee}"):
+                        st.session_state.selected_drinks[iced_key] = current_iced + 1
                         st.rerun()
             
-            with temp_col3:
-                if st.button("❌ Cancel", key="cancel_btn", use_container_width=True):
-                    st.session_state.selected_coffee = None
-                    st.rerun()
+            st.markdown("---")
+        
+        # Order action buttons
+        order_cols = st.columns(2)
+        with order_cols[0]:
+            if st.button("✅ PLACE ORDER", use_container_width=True, type="primary"):
+                if st.session_state.selected_drinks:
+                    if add_order(st.session_state.selected_drinks):
+                        st.success("Order placed successfully!")
+                        st.session_state.selected_drinks = {}
+                        st.rerun()
+                else:
+                    st.warning("Please select at least one drink!")
+        
+        with order_cols[1]:
+            if st.button("🗑️ CLEAR ALL", use_container_width=True):
+                st.session_state.selected_drinks = {}
+                st.rerun()
     
     with col2:
         st.subheader("Recent Orders")
@@ -172,9 +244,12 @@ if page == "🛒 Order Input":
                 for order in reversed(recent_orders):
                     status_icon = "✅" if order.get('status') == 'completed' else "🕐"
                     order_num = order.get('order_number', 'Unknown')
-                    coffee = order.get('coffee_type', 'Unknown')
-                    temp = order.get('temperature', 'Hot')
-                    st.info(f"{status_icon} {order_num}: {temp} {coffee}")
+                    drinks = order.get('drinks', {})
+                    total_cups = sum(drinks.values())
+                    
+                    with st.expander(f"{status_icon} {order_num} ({total_cups} cups)"):
+                        for drink, qty in drinks.items():
+                            st.write(f"• {drink}: {qty}")
             else:
                 st.info("No orders yet")
         except Exception as e:
@@ -192,7 +267,6 @@ elif page == "👨‍🍳 Barista":
             st.markdown("### 📋 Drinks to Make")
             
             for drink, count in drink_summary.items():
-                # Large, easy-to-read format
                 st.markdown(f"""
                 <div style="
                     background-color: #f0f2f6; 
@@ -224,7 +298,6 @@ elif page == "👨‍🍳 Barista":
             if st.button("🗑️ Clear Completed Orders", use_container_width=True):
                 try:
                     st.session_state.orders = [order for order in st.session_state.orders if order.get('status') != 'completed']
-                    save_shared_data()  # Save after clearing
                     st.rerun()
                 except Exception as e:
                     st.error("Error clearing orders")
@@ -259,11 +332,19 @@ elif page == "🍽️ Waiter Service":
                 col1, col2 = st.columns([3, 1])
                 
                 with col1:
-                    # Large, easy-to-read order display
                     order_num = order.get('order_number', f'Order #{i+1}')
-                    coffee = order.get('coffee_type', 'Unknown')
-                    temp = order.get('temperature', 'Hot')
+                    drinks = order.get('drinks', {})
                     order_time = format_time(order.get('timestamp', time.time()))
+                    total_cups = sum(drinks.values())
+                    
+                    # Create drinks list
+                    drinks_list = []
+                    for drink, qty in drinks.items():
+                        if qty > 1:
+                            drinks_list.append(f"{qty}x {drink}")
+                        else:
+                            drinks_list.append(drink)
+                    drinks_text = "<br>".join([f"• {drink}" for drink in drinks_list])
                     
                     st.markdown(f"""
                     <div style="
@@ -274,7 +355,10 @@ elif page == "🍽️ Waiter Service":
                         border-left: 5px solid #ffc107;
                     ">
                         <h1 style="margin: 0; color: #856404; font-size: 2.5em;">{order_num}</h1>
-                        <h2 style="margin: 10px 0; color: #495057;">{temp} {coffee}</h2>
+                        <h3 style="margin: 10px 0; color: #495057;">({total_cups} cups total)</h3>
+                        <div style="margin: 10px 0; color: #495057; font-size: 1.1em;">
+                            {drinks_text}
+                        </div>
                         <p style="margin: 0; color: #6c757d; font-size: 0.9em;">
                             Ordered: {order_time}
                         </p>
@@ -284,11 +368,12 @@ elif page == "🍽️ Waiter Service":
                 with col2:
                     if st.button(f"✅ Served", key=f"serve_{order_num}_{i}", use_container_width=True):
                         if mark_order_completed(order_num):
-                            st.success(f"Order {order_num} marked as served!")
-                            st.balloons()  # Celebration for serving an order!
+                            st.success(f"Order {order_num} served!")
+                            st.balloons()
                             st.rerun()
             
             # Summary
+            total_pending_cups = sum(sum(order.get('drinks', {}).values()) for order in pending_orders)
             st.markdown(f"""
             <div style="
                 background-color: #d1ecf1; 
@@ -297,7 +382,9 @@ elif page == "🍽️ Waiter Service":
                 border-radius: 10px; 
                 text-align: center;
             ">
-                <h2 style="margin: 0; color: #0c5460;">Total Orders Pending: {len(pending_orders)}</h2>
+                <h2 style="margin: 0; color: #0c5460;">
+                    {len(pending_orders)} Orders Pending | {total_pending_cups} Total Cups
+                </h2>
             </div>
             """, unsafe_allow_html=True)
             
