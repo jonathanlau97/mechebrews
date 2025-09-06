@@ -168,55 +168,62 @@ if page == "🛒 Order Input":
             st.info(f"Total items: {total_items}")
             st.markdown("---")
         
-        # Coffee selection with quantity controls
-        for coffee in COFFEE_TYPES:
-            st.markdown(f"### {coffee}")
-            
-            hot_col, iced_col = st.columns(2)
-            
-            with hot_col:
-                hot_key = f"Hot {coffee}"
-                current_hot = st.session_state.selected_drinks.get(hot_key, 0)
-                
-                qty_cols = st.columns([1, 2, 1])
-                with qty_cols[0]:
-                    if st.button("➖", key=f"minus_hot_{coffee}"):
+        # Coffee selection with quantity controls - simplified view
+        st.markdown("### Select Drinks")
+        
+        # Create a clean grid layout
+        drink_cols = st.columns(2)
+        
+        for i, coffee in enumerate(COFFEE_TYPES):
+            with drink_cols[i % 2]:
+                with st.container():
+                    st.markdown(f"**{coffee}**")
+                    
+                    # Hot option
+                    hot_key = f"Hot {coffee}"
+                    current_hot = st.session_state.selected_drinks.get(hot_key, 0)
+                    
+                    hot_cols = st.columns([3, 1, 1])
+                    with hot_cols[0]:
+                        st.write("🔥 Hot")
+                    with hot_cols[1]:
                         if current_hot > 0:
-                            st.session_state.selected_drinks[hot_key] = current_hot - 1
-                            if st.session_state.selected_drinks[hot_key] == 0:
-                                del st.session_state.selected_drinks[hot_key]
+                            if st.button("−", key=f"minus_hot_{coffee}", help="Remove one"):
+                                st.session_state.selected_drinks[hot_key] = current_hot - 1
+                                if st.session_state.selected_drinks[hot_key] == 0:
+                                    del st.session_state.selected_drinks[hot_key]
+                                st.rerun()
+                        else:
+                            st.write("")
+                    with hot_cols[2]:
+                        display_text = f"+{current_hot}" if current_hot > 0 else "+"
+                        if st.button(display_text, key=f"plus_hot_{coffee}", help="Add one"):
+                            st.session_state.selected_drinks[hot_key] = current_hot + 1
                             st.rerun()
-                
-                with qty_cols[1]:
-                    st.markdown(f"**🔥 Hot: {current_hot}**")
-                
-                with qty_cols[2]:
-                    if st.button("➕", key=f"plus_hot_{coffee}"):
-                        st.session_state.selected_drinks[hot_key] = current_hot + 1
-                        st.rerun()
-            
-            with iced_col:
-                iced_key = f"Iced {coffee}"
-                current_iced = st.session_state.selected_drinks.get(iced_key, 0)
-                
-                qty_cols = st.columns([1, 2, 1])
-                with qty_cols[0]:
-                    if st.button("➖", key=f"minus_iced_{coffee}"):
+                    
+                    # Iced option
+                    iced_key = f"Iced {coffee}"
+                    current_iced = st.session_state.selected_drinks.get(iced_key, 0)
+                    
+                    iced_cols = st.columns([3, 1, 1])
+                    with iced_cols[0]:
+                        st.write("🧊 Iced")
+                    with iced_cols[1]:
                         if current_iced > 0:
-                            st.session_state.selected_drinks[iced_key] = current_iced - 1
-                            if st.session_state.selected_drinks[iced_key] == 0:
-                                del st.session_state.selected_drinks[iced_key]
+                            if st.button("−", key=f"minus_iced_{coffee}", help="Remove one"):
+                                st.session_state.selected_drinks[iced_key] = current_iced - 1
+                                if st.session_state.selected_drinks[iced_key] == 0:
+                                    del st.session_state.selected_drinks[iced_key]
+                                st.rerun()
+                        else:
+                            st.write("")
+                    with iced_cols[2]:
+                        display_text = f"+{current_iced}" if current_iced > 0 else "+"
+                        if st.button(display_text, key=f"plus_iced_{coffee}", help="Add one"):
+                            st.session_state.selected_drinks[iced_key] = current_iced + 1
                             st.rerun()
-                
-                with qty_cols[1]:
-                    st.markdown(f"**🧊 Iced: {current_iced}**")
-                
-                with qty_cols[2]:
-                    if st.button("➕", key=f"plus_iced_{coffee}"):
-                        st.session_state.selected_drinks[iced_key] = current_iced + 1
-                        st.rerun()
-            
-            st.markdown("---")
+                    
+                    st.markdown("---")
         
         # Order action buttons
         order_cols = st.columns(2)
